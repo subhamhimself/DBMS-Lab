@@ -2,218 +2,173 @@
 
 using namespace std;
 
-int D = 1, T = 1;
+#define ll long long
+#define f(i, a, b) for(ll i = a; i < b; i++)
 
-class Node {
-    friend class BPlusTree;
-    private:
-        bool isLeafNode;
-        int size;
-        Node * rightSibling, * leftSibling, * parent;
-        vector < int > keys;
-        vector < Node * > children;
-        
-        Node * split(bool isLeaf, Node * node) { 
-            if(isLeaf) {
-                Node * tmp = new Node(true, node->parent);
-                for(int i = D; i < 2*D + 1; i++) {
-                    tmp->keys.push_back(node->keys[i]);
-                }
-                node->keys.resize(D);
+int totalPageSize;
 
-                return tmp;
-            }
-            else {
-                Node * tmp = new Node(false, node->parent);
-                for(int i = T + 1; i < 2*T + 2; i++) {
-                    tmp->keys.push_back(node->keys[i]);
-                }
-                node->keys.resize(T);
+class Page{
+    Page* prevPage;
+    Page* nextPage;
+    int countOfRecords = 0;
+    int startAddressOfFreeSpace = 0;
 
-                return tmp;
-            }
-
-        }
-
-        Node * insertIndex(int value, Node * node, Node * root) {
-            if(node->parent == NULL) {
-                Node * tmp = new Node(false, NULL);
-                node->parent = tmp;
-                node->rightSibling->parent = tmp;
-                tmp->keys.push_back(value);
-                tmp->children[0] = node;
-                tmp->children[1] = node->rightSibling;
-                return tmp;
-            }
-            else {
-                Node * par = node->parent;
-                par->keys.push_back(value);
-                sort(par->keys.begin(), par->keys.end());
-
-                if(par->keys.size() > par->size) {
-                    int partition = par->keys[T];
-                    Node * tmp = split(false, par);
-
-                    tmp->rightSibling = par->rightSibling;
-                    tmp->leftSibling = par;
-                    if (par->rightSibling != NULL) par->rightSibling->leftSibling = tmp;
-                    par->rightSibling = tmp;
-
-                    for(int i = 0; i < par->keys.size(); i++) {
-                        par->children[i + 1] = par->children[i]->rightSibling;
-                    }
-
-                    tmp->children[0] = par->children[par->keys.size()]->rightSibling;
-                    for(int i = 0; i < tmp->keys.size(); i++) {
-                        tmp->children[i + 1] = tmp->children[i]->rightSibling;
-                    }
-
-                    return insertIndex(partition, par, root);
-                } 
-                else {
-                    for(int i = 0; i < par->keys.size(); i++) {
-                        par->children[i + 1] = par->children[i]->rightSibling;
-                    }
-                }
-                return root;
-            }
-        }
-
-    public:
-        Node(bool isLeaf, Node * parent) {
-            this->isLeafNode = isLeaf;
-            this->leftSibling = this->rightSibling = NULL;
-            this->parent = parent;
-
-            if(isLeaf) {
-                this->size = 2*D;
-            }
-            else {
-                this->size = 2*T + 1;
-                this->children.resize(2 * (T + 1), NULL);
-            }
-        }
-
-
-        Node * insertData(int value, Node * root) {
-            keys.push_back(value);
-            sort(keys.begin(), keys.end());
-
-            if(keys.size() > size) {
-                int partition = keys[D];
-
-                Node * tmp = split(true, this);
-
-                tmp->rightSibling = this->rightSibling;
-                tmp->leftSibling = this;
-                if (this->rightSibling != NULL) this->rightSibling->leftSibling = tmp;
-                this->rightSibling = tmp;
-
-                return insertIndex(partition, this, root);
-            }
-            return root;
-        }
-
-        bool isLeaf() {
-            return isLeafNode;
-        }
+    int freeSpace;
+    map<ll, pair<ll, ll>> directory;
+    friend class Heap;
+    
+public:
+    Page(){
+        freeSpace = totalPageSize - 4*4;
+    }
 };
 
-class BPlusTree {
-    private:
-        Node * root;
+class Heap{
+    int numOfPages;
+    Page* firstPage;
 
-        int countIndexNodes(int count, Node * node) {
-            if(node->isLeaf()) return 0;
-            else {
-                count += countIndexNodes(count, node->children[0]);
-                count++;
-                while(node->rightSibling != NULL) {
-                    node = node->rightSibling;
-                    count++;
-                }
-                return count;
-            }
-        }
+public:
+    Heap(){
+        numOfPages = 0;
+        firstPage = NULL;
+    }
 
-        int countDataNode() {
-            Node * node = root;
-            while(node->isLeaf() == false) {
-                node = node->children[0];
-            }
+    void showStatus(){
+        if(numOfPages > 0){
+            cout<<numOfPages<<" ";
 
-            int cnt = 1;
-            while(node->rightSibling != NULL) {
-                node = node->rightSibling; 
-                cnt++;
-            }
+            Page* currentPage = firstPage;
 
-            return cnt;
-        }
+            while(currentPage != NULL){
+                cout<<currentPage->countOfRecords<<" ";
 
-    public:
-        BPlusTree() {
-            this->root = new Node(true, NULL);
-        }
-
-        void insert(int value, Node * node) {
-            if(node->isLeaf()) {
-                root = node->insertData(value, root);
-            }
-            else {
-                if(value <= node->keys[0]) insert(value, node->children[0]);
-                else if(value > node->keys[node->keys.size() - 1]) insert(value, node->children[node->keys.size()]);
-                else {
-                    for(int i = 1; i < node->keys.size(); i++) {
-                        if(node->keys[i-1] < value && value <= node->keys[i]) 
-                        {
-                            insert(value, node->children[i]);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        void display() {
-            Node * node = root;
-            int nIndex = 0, nData = 0;
-            nIndex = countIndexNodes(0, root);
-            nData = countDataNode();
-
-            cout << nIndex << " " << nData << " ";
-            for(int i = 0; i < root->keys.size(); i++) {
-                cout << root->keys[i] << " ";
-            }
-            cout << endl;
-        }
-
-        Node * getRoot() {
-            return root;
-        }
-
-};
-
-int main() {
-
-    cin >> D >> T;
-
-    BPlusTree tree;
-
-    int q;
-    while(cin >> q) {
-        if(q == 1) {
-            int val; cin >> val;
-            tree.insert(val, tree.getRoot());
-        }
-        else if(q == 2) {
-            tree.display();
-        }
-        else if(q == 3) {
-            break;
+                currentPage = currentPage->nextPage;
+            }cout<<endl;
+        }else{
+            cout<<numOfPages<<endl;
         }
     }
 
+    void insert(int recordSize, int keyToInsert){
+        if(firstPage == NULL){
+            firstPage = new Page();
 
-    return 0;
+            firstPage -> prevPage = NULL;
+            firstPage -> nextPage = NULL;
+            firstPage -> countOfRecords = 1;
+
+            firstPage -> directory[firstPage -> startAddressOfFreeSpace] = {keyToInsert, recordSize};
+            firstPage -> startAddressOfFreeSpace = firstPage -> startAddressOfFreeSpace + recordSize; // here, a +1 may be required to produce the correct output.
+            firstPage -> freeSpace = firstPage -> freeSpace - (recordSize + 4);
+            
+            numOfPages++;
+        }else{
+            Page* currentPage = firstPage;
+            Page* upcomingPage = NULL;
+            bool inserted = false;
+            
+            while(currentPage != NULL && inserted == false){
+                if(currentPage -> freeSpace >= recordSize + 4){
+                    //insert the record in currentPage
+
+                    currentPage -> countOfRecords++;
+                    
+                    currentPage -> directory[currentPage -> startAddressOfFreeSpace] = {keyToInsert, recordSize};
+                    currentPage -> startAddressOfFreeSpace = firstPage -> startAddressOfFreeSpace + recordSize;
+                    currentPage -> freeSpace = firstPage -> freeSpace - (recordSize + 4);
+
+                    inserted = true;
+                }else{
+                    if(currentPage->nextPage == NULL){
+                        //create a new Page.
+                        //Point the nextPage pointer of currentPage to the new Page.
+                        //Also point the prevPage pointer of new Page to currentPage.
+                        //insert the new Record.
+                        //increment the value of numOfPages.
+
+                        upcomingPage = new Page();
+
+                        upcomingPage -> prevPage = currentPage;
+                        upcomingPage -> nextPage = NULL;
+                        upcomingPage -> countOfRecords = 1;
+
+                        upcomingPage -> directory[upcomingPage -> startAddressOfFreeSpace] = {keyToInsert, recordSize};
+                        upcomingPage -> startAddressOfFreeSpace = upcomingPage -> startAddressOfFreeSpace + recordSize;
+                        upcomingPage -> freeSpace = upcomingPage -> freeSpace - (recordSize + 4);
+
+
+                        currentPage -> nextPage = upcomingPage;
+                        numOfPages++;
+
+                        inserted = true;
+                    }else{
+                        //change the value of "currentPage" to "nextPage".
+
+                        currentPage = currentPage -> nextPage;
+                    }
+                }
+                    
+            }
+            
+        }
+    }
+
+    void search(int keyToSearch){
+        Page* currentPage = firstPage;
+        int currentPageID = 0;
+        bool found = false;
+
+        while(currentPage != NULL && found == false){
+            int slotID = 0;
+
+            for(auto i: currentPage->directory){
+                if(i.second.first == keyToSearch){
+                    cout<<currentPageID<<" "<<slotID<<endl;
+                    found = true;
+                    break;
+                }
+                slotID++;
+            }
+
+            currentPage = currentPage -> nextPage;
+            currentPageID++;
+        }
+
+        if(!found){
+            cout<<-1<<" "<<-1<<endl;
+        }
+        
+    }
+};
+
+int main(){
+
+    cin>>totalPageSize;
+
+    Heap heap;
+
+    while(1){
+        int x;
+        cin>>x;
+
+        if(x == 1){
+            int recordSize;
+            int keyToInsert;
+
+            cin>>recordSize>>keyToInsert;
+
+            heap.insert(recordSize, keyToInsert);
+        }else if(x == 2){
+            heap.showStatus();
+        }else if(x == 3){
+            int keyToSearch;
+
+            cin>>keyToSearch;
+
+            heap.search(keyToSearch);
+        }else{
+            cout<<"Quitting the program..."<<endl;
+            break;
+        }
+    }
 }
